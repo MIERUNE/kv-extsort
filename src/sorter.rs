@@ -233,8 +233,8 @@ fn start_merging_stage<K, E>(
     let mut num_running_merges = 0;
 
     let mut recv_select = Select::new();
-    recv_select.recv(&chunk_rx); // 0
-    recv_select.recv(&merged_rx); // 1
+    recv_select.recv(&chunk_rx); // select index=0
+    recv_select.recv(&merged_rx); // select index=1
 
     loop {
         let idx = recv_select.ready();

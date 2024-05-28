@@ -8,85 +8,84 @@ use log::warn;
 
 use crate::{chunk::FileChunk, Result};
 
-#[allow(dead_code)]
-pub fn merge_chunks_by_naive_picking<K, E>(
-    canceled: Arc<AtomicBool>,
-    chunks: Vec<FileChunk<K>>,
-    mut add_fn: impl FnMut((K, Vec<u8>)) -> Result<(), E>,
-) -> Result<(), E>
-where
-    K: Ord + Pod + Copy + Send + Sync,
-{
-    let tmp_file_paths = chunks
-        .iter()
-        .map(|chunk| chunk.path().to_owned())
-        .collect::<Vec<_>>();
-
-    let mut chunk_iters = chunks
-        .into_iter()
-        .map(|chunk| Ok(chunk.iter()?.peekable()))
-        .collect::<Result<Vec<_>, E>>()?;
-
-    loop {
-        let mut min_key = None;
-        let mut min_key_idx = None;
-        let mut found_ranout = false;
-
-        if canceled.load(std::sync::atomic::Ordering::Relaxed) {
-            break;
-        }
-
-        for (idx, iter) in chunk_iters.iter_mut().enumerate() {
-            match iter.peek() {
-                Some(Ok((key, _))) => {
-                    if min_key.is_none()
-                        || key < min_key.as_ref().expect("min_key should have value")
-                    {
-                        min_key = Some(*key);
-                        min_key_idx = Some(idx);
-                    }
-                }
-                Some(Err(_)) => {
-                    min_key_idx = Some(idx);
-                    break;
-                }
-                None => {
-                    found_ranout = true;
-                }
-            }
-        }
-
-        if let Some(min_key_idx) = min_key_idx {
-            match chunk_iters[min_key_idx].next() {
-                Some(Ok((key, value))) => {
-                    add_fn((key, value))?;
-                }
-                Some(Err(e)) => {
-                    return Err(e);
-                }
-                None => unreachable!(),
-            }
-        } else {
-            break;
-        }
-
-        if found_ranout {
-            // remove ran-out iterators
-            chunk_iters.retain_mut(|it| it.peek().is_some());
-        }
-    }
-
-    for path in tmp_file_paths {
-        if std::fs::remove_file(&path).is_err() {
-            warn!("Failed to remove file: {:?}", path);
-        }
-    }
-
-    match canceled.load(std::sync::atomic::Ordering::Relaxed) {
-        false => Ok(()),
-        true => Err(crate::Error::Canceled),
-    }
-}
+// pub fn merge_chunks_by_naive_picking<K, E>(
+//     canceled: Arc<AtomicBool>,
+//     chunks: Vec<FileChunk<K>>,
+//     mut add_fn: impl FnMut((K, Vec<u8>)) -> Result<(), E>,
+// ) -> Result<(), E>
+// where
+//     K: Ord + Pod + Copy + Send + Sync,
+// {
+//     let tmp_file_paths = chunks
+//         .iter()
+//         .map(|chunk| chunk.path().to_owned())
+//         .collect::<Vec<_>>();
+//
+//     let mut chunk_iters = chunks
+//         .into_iter()
+//         .map(|chunk| Ok(chunk.iter()?.peekable()))
+//         .collect::<Result<Vec<_>, E>>()?;
+//
+//     loop {
+//         let mut min_key = None;
+//         let mut min_key_idx = None;
+//         let mut found_ranout = false;
+//
+//         if canceled.load(std::sync::atomic::Ordering::Relaxed) {
+//             break;
+//         }
+//
+//         for (idx, iter) in chunk_iters.iter_mut().enumerate() {
+//             match iter.peek() {
+//                 Some(Ok((key, _))) => {
+//                     if min_key.is_none()
+//                         || key < min_key.as_ref().expect("min_key should have value")
+//                     {
+//                         min_key = Some(*key);
+//                         min_key_idx = Some(idx);
+//                     }
+//                 }
+//                 Some(Err(_)) => {
+//                     min_key_idx = Some(idx);
+//                     break;
+//                 }
+//                 None => {
+//                     found_ranout = true;
+//                 }
+//             }
+//         }
+//
+//         if let Some(min_key_idx) = min_key_idx {
+//             match chunk_iters[min_key_idx].next() {
+//                 Some(Ok((key, value))) => {
+//                     add_fn((key, value))?;
+//                 }
+//                 Some(Err(e)) => {
+//                     return Err(e);
+//                 }
+//                 None => unreachable!(),
+//             }
+//         } else {
+//             break;
+//         }
+//
+//         if found_ranout {
+//             // remove ran-out iterators
+//             chunk_iters.retain_mut(|it| it.peek().is_some());
+//         }
+//     }
+//
+//     for path in tmp_file_paths {
+//         if std::fs::remove_file(&path).is_err() {
+//             warn!("Failed to remove file: {:?}", path);
+//         }
+//     }
+//
+//     match canceled.load(std::sync::atomic::Ordering::Relaxed) {
+//         false => Ok(()),
+//         true => Err(crate::Error::Canceled),
+//     }
+// }
 
 struct HeapItem<K: Ord> {
     key: K,
